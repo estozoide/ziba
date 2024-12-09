@@ -1,0 +1,8 @@
+
+#
+*.code-workspace
+*.sum
+
+#
+build/
+build.ps1
