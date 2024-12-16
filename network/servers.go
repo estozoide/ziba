@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bufio"
 	"crypto/tls"
 	"database/sql"
 	"encoding/gob"
@@ -9,7 +10,6 @@ import (
 	"log"
 	"math/big"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -71,26 +71,26 @@ func (s *SetupServer) handleClient(conn net.Conn) {
 	}
 	defer file.Close()
 
-	encoder := gob.NewEncoder(conn)
-
-	// SEND msg.
-	msg := fmt.Sprintf("\n\n  Hello,\n    Welcome to %s\n\n", s.store.Name)
-	if err := encoder.Encode(msg); err != nil {
-		log.Fatalf("failed to encode Bank's introductory message: %v", err)
-		return
-	}
+	// encoder := gob.NewEncoder(conn)
+	writer := bufio.NewWriter(conn)
 
 	// SEND name.
 	bankName := s.store.Name
-	if err := encoder.Encode(bankName); err != nil {
+	if _, err := writer.WriteString(bankName + "\n"); err != nil {
 		log.Fatalf("failed to encode Bank's name message: %v", err)
 		return
 	}
 
 	// SEND file.
-	_, err = io.Copy(conn, file)
+	_, err = io.Copy(writer, file)
 	if err != nil {
 		log.Fatalf("failed to send certificate file message: %v", err)
+		return
+	}
+
+	// Flush writer.
+	if err := writer.Flush(); err != nil {
+		log.Fatalf("failed to flush connection: %v", err)
 		return
 	}
 
@@ -710,18 +710,64 @@ func (s *ExchangeServer) handleClient(conn net.Conn) {
 //
 
 // New.
-func (s *GetServer) New() *GetServer {
+func (s *GetServer) New(filepath string) *GetServer {
 	s.port = getPort
+	s.filepath = filepath
 	return s
 }
 
 // Start.
-func (s *GetServer) Start(filename string) {
-	// Handle HTTP request.
-	http.HandleFunc("/cert", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, filename)
-	})
+func (s *GetServer) Start() error {
+	// Start listening.
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	if err != nil {
+		log.Fatalf("failed to start Get server: %v", err)
+		return err
+	}
 
-	// Start server.
-	http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
+	log.Printf("Get server listening on port %d", s.port)
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatalf("failed to accept connection: %v", err)
+			continue
+		}
+		go s.handleClient(conn)
+	}
+}
+
+// handleClient.
+func (s *GetServer) handleClient(conn net.Conn) {
+	// Info message.
+	log.Print("Serving client [Get]")
+
+	// Close connection when finished.
+	defer conn.Close()
+
+	// Grab file.
+	file, err := os.Open(s.filepath)
+	if err != nil {
+		log.Fatalf("failed to open file %s: %v", s.filepath, err)
+		return
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(conn)
+
+	// SEND file.
+	_, err = io.Copy(writer, file)
+	if err != nil {
+		log.Fatalf("failed to send file message: %v", err)
+		return
+	}
+
+	// Flush writer.
+	if err := writer.Flush(); err != nil {
+		log.Fatalf("failed to flush connection: %v", err)
+		return
+	}
+
+	// Info message.
+	log.Print("Finished serving client [Get]")
 }

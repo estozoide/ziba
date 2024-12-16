@@ -721,16 +721,16 @@ func (store *ClientStore) InspectFull() {
 		log.Fatalf("failed to query Coin: %v", err)
 	}
 	// Print output header.
-	fmt.Printf("%-5s %-10s %-10s\n", "ID", "ClientId", "ClientHash")
+	fmt.Printf("%-5s %-10s %-10s\n", "ID", "ClientId", "CoinHash")
 	for rows.Next() {
 		// Scanner variables.
 		var (
-			id         int64
-			clientId   int64
-			clientHash int64
+			id       int64
+			clientId int64
+			coinHash int64
 		)
 
-		err = rows.Scan(&id, &clientId, &clientHash)
+		err = rows.Scan(&id, &clientId, &coinHash)
 		if err == sql.ErrNoRows {
 			break
 		} else if err != nil {
@@ -738,7 +738,7 @@ func (store *ClientStore) InspectFull() {
 		}
 
 		// Print output row.
-		fmt.Printf("%-5d %-10d %-10.10d\n", id, clientId, clientHash)
+		fmt.Printf("%-5d %-10d %-10.10d\n", id, clientId, coinHash)
 	}
 
 	// CoinRandom.

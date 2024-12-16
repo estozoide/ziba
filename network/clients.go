@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bufio"
 	"crypto/tls"
 	"encoding/gob"
 	"fmt"
@@ -8,9 +9,9 @@ import (
 	"log"
 	"math/big"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 	"ziba/core"
 	"ziba/store"
@@ -38,7 +39,7 @@ func (c *SetupClient) Execute() error {
 	defer conn.Close()
 
 	// Info message.
-	log.Printf("Connected to Certificate server")
+	log.Printf("Connected to Setup server")
 
 	// Create a file to copy into the certificate.
 	directory, err := store.GetZibaDir()
@@ -54,26 +55,20 @@ func (c *SetupClient) Execute() error {
 	}
 	defer certFile.Close()
 
-	decoder := gob.NewDecoder(conn)
-
-	// RECV msg.
-	var msg string
-	if err := decoder.Decode(&msg); err != nil {
-		log.Fatalf("failed to decode Bank's introduction message: %v", err)
-		return err
-	}
-	log.Print(msg)
+	// decoder := gob.NewDecoder(conn)
+	reader := bufio.NewReader(conn)
 
 	// RECV name.
-	var bankName string
-	if err := decoder.Decode(&bankName); err != nil {
+	bankName, err := reader.ReadString('\n')
+	if err != nil {
 		log.Fatalf("failed to decode Bank's name message: %v", err)
 		return err
 	}
-	c.store.BankName = bankName
+	c.store.BankName = strings.TrimSpace(bankName)
+	log.Printf("\n\n  Hello,\n  Welcome to %s\n\n", bankName)
 
 	// RECV file.
-	_, err = io.Copy(certFile, conn)
+	_, err = io.Copy(certFile, reader)
 	if err != nil {
 		log.Fatalf("failed to read certificate file message: %v", err)
 		return err
@@ -270,7 +265,7 @@ func (c *PaymentClient) Execute() error {
 	defer conn.Close()
 
 	// Info message.
-	log.Print("Connected to Withdrawal server")
+	log.Print("Connected to Payment server")
 
 	// Read Client.
 	client, err := c.store.ReadClient()
@@ -291,6 +286,7 @@ func (c *PaymentClient) Execute() error {
 
 	// Check local balance.
 	balance := len(coins)
+	// log.Printf("Current balance: %d", balance)
 	if balance < 1 {
 		log.Printf("No coins on local storage")
 		return nil
@@ -558,29 +554,42 @@ func (c *GetClient) New(serverAddr string) *GetClient {
 
 // Execute.
 func (c *GetClient) Execute() error {
-	// GET request certificate.
-	resp, err := http.Get(fmt.Sprintf("%s%s%s", "http://", c.serverAddr, "/cert"))
+	// Connect to server.
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", c.serverAddr, getPort))
 	if err != nil {
-		log.Fatalf("failed to issue GET request: %v", err)
+		log.Fatalf("failed to connecto to server at %s: %v", c.serverAddr, err)
 		return err
 	}
-	defer resp.Body.Close()
+	defer conn.Close()
 
-	// Create a file to save the certificate.
-	directory, _ := store.GetZibaDir()
-	certFilename := filepath.Join(directory, "bank_cert.pem")
-	certFile, err := os.Create(certFilename)
+	// Info message.
+	log.Printf("Connected to Get server")
+
+	// Create file to copy into.
+	directory, err := store.GetZibaDir()
 	if err != nil {
-		log.Fatalf("failed to create Cert file: %v", err)
+		log.Fatalf("failed to retrieve Ziba directory: %v", err)
+		return err
 	}
-	defer certFile.Close()
-
-	// Write the response body (certificate) to the file.
-	_, err = io.Copy(certFile, resp.Body)
+	filepath := filepath.Join(directory, fmt.Sprintf("%s_cert.pem", c.serverAddr))
+	file, err := os.Create(filepath)
 	if err != nil {
-		log.Fatalf("failed to copy response body to file: %v", err)
+		log.Printf("failed to create file: %v", err)
+		return err
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(conn)
+
+	// RECV file.
+	_, err = io.Copy(file, reader)
+	if err != nil {
+		log.Fatalf("failed to read file message: %v", err)
+		return err
 	}
 
-	println("Certificate downloaded")
+	// Info message.
+	log.Printf("Get Success!")
+
 	return nil
 }

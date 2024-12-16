@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"log"
 	"path/filepath"
 	"testing"
 	"ziba/core"
@@ -151,5 +152,17 @@ func TestClientStore(t *testing.T) {
 		t.Log(coin)
 	}
 	t.Logf("total coins: %d", len(coins))
+}
 
+func TestStoreCoins(t *testing.T) {
+	directory, _ := store.GetZibaDir()
+	dbPath := filepath.Join(directory, "agus.db")
+	store, _ := new(store.ClientStore).New(dbPath)
+	store.BankName = "bancoco"
+	client, _ := store.ReadClient()
+	coins, _ := store.ReadCoins()
+	for _, coin := range coins {
+		valid := coin.Profile().VerifyProperties(&client.Bank)
+		log.Printf("%v", valid)
+	}
 }

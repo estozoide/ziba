@@ -101,7 +101,8 @@ type ExchangeClient struct {
 
 // GetServer.
 type GetServer struct {
-	port int
+	port     int
+	filepath string
 }
 
 // GetClient.

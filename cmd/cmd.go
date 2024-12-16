@@ -83,7 +83,7 @@ var accgen = &cobra.Command{
 		}
 
 		if len(flags.address) == 0 {
-			return fmt.Errorf("required \"server\"flag not set")
+			return fmt.Errorf("required \"server\" flag not set")
 		}
 
 		return nil
@@ -144,7 +144,7 @@ var withdraw = &cobra.Command{
 		}
 
 		if len(flags.address) == 0 {
-			return fmt.Errorf("required \"server\"flag not set")
+			return fmt.Errorf("required \"server\" flag not set")
 		}
 
 		return nil
@@ -189,7 +189,7 @@ var wgUser sync.WaitGroup
 
 // user charge
 var charge = &cobra.Command{
-	Use:   "charge  --user USER",
+	Use:   "charge  --user USER --bank BANKNAME",
 	Short: "USER starts payment server.",
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		// Check that database file exists.
@@ -207,6 +207,11 @@ var charge = &cobra.Command{
 			}
 		}
 
+		// Bind to a bank account.
+		if len(flags.bank) == 0 {
+			return fmt.Errorf("required \"bank\" flag not set")
+		}
+
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -222,21 +227,24 @@ var charge = &cobra.Command{
 		if err != nil {
 			log.Fatalf("failed to create store: %v", err)
 		}
+		store.BankName = flags.bank
 
 		// Load TLS server configuration.
 		keyPath := filepath.Join(directory, fmt.Sprintf("%s_key.pem", flags.user))
 		certPath := filepath.Join(directory, fmt.Sprintf("%s_cert.pem", flags.user))
 		config, err := network.GetServerTLSConfig(certPath, keyPath)
 		if err != nil {
-			log.Fatalf("failed to load certificate (client): %v", err)
+			log.Fatalf("failed to load certificate (server): %v", err)
 		}
 
-		// Start GetServer
-		getServer := new(network.GetServer).New()
+		// Start GetServer.
+		getServer := new(network.GetServer).New(certPath)
 		wgUser.Add(1)
 		go func() {
 			defer wgUser.Done()
-			getServer.Start(certPath)
+			if err := getServer.Start(); err != nil {
+				log.Fatalf("failed to start GetServer: %v", err)
+			}
 		}()
 
 		// Start PaymentServer.
@@ -256,7 +264,7 @@ var charge = &cobra.Command{
 
 // user pay
 var pay = &cobra.Command{
-	Use:   "pay --user USER --server SERVER",
+	Use:   "pay --user USER --server SERVER --bank BANKNAME",
 	Short: "USER sends 1 coin to another user at SERVER.",
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		// Check that database file exists.
@@ -275,7 +283,11 @@ var pay = &cobra.Command{
 		}
 
 		if len(flags.address) == 0 {
-			return fmt.Errorf("required \"server\"flag not set")
+			return fmt.Errorf("required \"server\" flag not set")
+		}
+
+		if len(flags.bank) == 0 {
+			return fmt.Errorf("required \"bank\" flag not set")
 		}
 
 		return nil
@@ -293,6 +305,7 @@ var pay = &cobra.Command{
 		if err != nil {
 			log.Fatalf("failed to create store: %v", err)
 		}
+		store.BankName = flags.bank
 
 		// Execute GetClient.
 		setupClient := new(network.GetClient).New(flags.address)
@@ -336,7 +349,7 @@ var deposit = &cobra.Command{
 		}
 
 		if len(flags.address) == 0 {
-			return fmt.Errorf("required \"server\"flag not set")
+			return fmt.Errorf("required \"server\" flag not set")
 		}
 
 		return nil
@@ -397,7 +410,7 @@ var exchange = &cobra.Command{
 		}
 
 		if len(flags.address) == 0 {
-			return fmt.Errorf("required \"server\"flag not set")
+			return fmt.Errorf("required \"server\" flag not set")
 		}
 
 		return nil
@@ -439,7 +452,7 @@ var exchange = &cobra.Command{
 
 // user inspect
 var userInspect = &cobra.Command{
-	Use:   "inspect",
+	Use:   "inspect [-f]",
 	Short: "View database information.",
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		// Check that database file exists.
